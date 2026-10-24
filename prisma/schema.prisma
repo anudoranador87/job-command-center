@@ -1,0 +1,253 @@
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// -------------------------------------------------------------
+// Auth Models (NextAuth / Auth.js)
+// -------------------------------------------------------------
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?
+  role          String    @default("USER")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts     Account[]
+  sessions     Session[]
+  profile      Profile?
+  documents    Document[]
+  jobs         Job[]
+  savedJobs    SavedJob[]
+  applications Application[]
+  integrations Integration[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// -------------------------------------------------------------
+// Profile & Master CV
+// -------------------------------------------------------------
+
+model Profile {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  headline       String?
+  summary        String?
+  targetRole     String?
+  location       String?
+  phone          String?
+  website        String?
+  linkedinUrl    String?
+  githubUrl      String?
+  skills         Json?
+  experience     Json?
+  education      Json?
+  languages      Json?
+  certifications Json?
+  rawExtracted   Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  versions ProfileVersion[]
+}
+
+model ProfileVersion {
+  id        String   @id @default(cuid())
+  profileId String
+  profile   Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  version   Int
+  data      Json
+  changeLog String?
+  createdAt DateTime @default(now())
+}
+
+model Document {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  filename     String
+  originalName String
+  mimeType     String
+  size         Int
+  path         String
+  parsedText   String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// -------------------------------------------------------------
+// Job Search & Aggregation
+// -------------------------------------------------------------
+
+model Job {
+  id                 String   @id @default(cuid())
+  userId             String?
+  user               User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  title              String
+  company            String
+  location           String?
+  remoteType         String?  @default("UNKNOWN")
+  jobType            String?  @default("FULL_TIME")
+  salaryMin          Float?
+  salaryMax          Float?
+  currency           String?  @default("EUR")
+  description        String
+  requirements       Json?
+  url                String?
+  source             String   @default("MANUAL")
+  externalId         String?
+  compatibilityScore Int?
+  compatibilityData  Json?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  savedBy      SavedJob[]
+  applications Application[]
+
+  @@unique([source, externalId])
+}
+
+model SavedJob {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobId     String
+  job       Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  notes     String?
+  createdAt DateTime @default(now())
+
+  @@unique([userId, jobId])
+}
+
+// -------------------------------------------------------------
+// Applications & Tracking (Kanban State Machine)
+// -------------------------------------------------------------
+
+model Application {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobId         String
+  job           Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  status        String   @default("WISHLIST")
+  appliedDate   DateTime?
+  portalUrl     String?
+  contactPerson String?
+  contactEmail  String?
+  salaryOffered Float?
+  notesSummary  String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  cvVersion   CVVersion?
+  coverLetter CoverLetter?
+  notes       ApplicationNote[]
+  events      ApplicationEvent[]
+}
+
+model CVVersion {
+  id            String      @id @default(cuid())
+  applicationId String      @unique
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  title         String
+  content       Json
+  docxPath      String?
+  pdfPath       String?
+  changeSummary String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+model CoverLetter {
+  id            String      @id @default(cuid())
+  applicationId String      @unique
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  content       String
+  language      String      @default("es")
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+model ApplicationNote {
+  id            String      @id @default(cuid())
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  content       String
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+model ApplicationEvent {
+  id            String      @id @default(cuid())
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  type          String
+  description   String
+  eventDate     DateTime    @default(now())
+  metadata      Json?
+}
+
+// -------------------------------------------------------------
+// Integrations
+// -------------------------------------------------------------
+
+model Integration {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider    String
+  status      String    @default("DISCONNECTED")
+  accessToken String?
+  tokenExpiry DateTime?
+  config      Json?
+  lastSyncAt  DateTime?
+  lastError   String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([userId, provider])
+}
