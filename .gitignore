@@ -6,3 +6,5 @@ node_modules
 prisma/*.db
 prisma/*.db-journal
 .anchor
+uploads/*
+!uploads/.gitkeep
